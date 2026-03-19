@@ -1,23 +1,10 @@
-import type { ApiConfig, ToolResponse } from "../types.js";
+import { z } from "zod";
+import type { ApiConfig } from "../types.js";
 import { apiRequest } from "../auth.js";
 
-export const definition = {
-  name: "search",
-  description: "Search items by query. Returns matching id, name, and relevance.",
-  inputSchema: {
-    type: "object" as const,
-    properties: {
-      query: {
-        type: "string",
-        description: "Search query",
-      },
-      limit: {
-        type: "number",
-        description: "Max results (default 5)",
-      },
-    },
-    required: ["query"],
-  },
+export const params = {
+  query: z.string().describe("Search query"),
+  limit: z.number().optional().describe("Max results (default 5)"),
 };
 
 interface SearchResult {
@@ -26,37 +13,27 @@ interface SearchResult {
   score: number;
 }
 
+export const name = "search";
+export const description = "Search items by query. Returns matching id, name, and relevance.";
+
 export async function handler(
-  args: Record<string, unknown>,
+  args: { query: string; limit?: number },
   config: ApiConfig,
-): Promise<ToolResponse> {
-  const params = new URLSearchParams({
-    q: String(args.query),
+) {
+  const searchParams = new URLSearchParams({
+    q: args.query,
     limit: String(args.limit ?? 5),
   });
 
   const data = await apiRequest<{ results: SearchResult[] }>(
     config,
-    `/search?${params.toString()}`,
+    `/search?${searchParams.toString()}`,
   );
 
   if (data.results.length === 0) {
-    return {
-      content: [{ type: "text", text: "No results found." }],
-    };
+    return { content: [{ type: "text" as const, text: "No results found." }] };
   }
 
-  const results = data.results.map((r) => ({
-    id: r.id,
-    name: r.name,
-  }));
-
-  return {
-    content: [
-      {
-        type: "text",
-        text: JSON.stringify(results, null, 2),
-      },
-    ],
-  };
+  const results = data.results.map((r) => ({ id: r.id, name: r.name }));
+  return { content: [{ type: "text" as const, text: JSON.stringify(results, null, 2) }] };
 }

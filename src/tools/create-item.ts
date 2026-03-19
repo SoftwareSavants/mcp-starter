@@ -1,23 +1,10 @@
-import type { ApiConfig, ToolResponse } from "../types.js";
+import { z } from "zod";
+import type { ApiConfig } from "../types.js";
 import { apiRequest } from "../auth.js";
 
-export const definition = {
-  name: "create_item",
-  description: "Create a new item. Returns the created item's id and name.",
-  inputSchema: {
-    type: "object" as const,
-    properties: {
-      name: {
-        type: "string",
-        description: "Item name",
-      },
-      description: {
-        type: "string",
-        description: "Item description (optional)",
-      },
-    },
-    required: ["name"],
-  },
+export const params = {
+  name: z.string().describe("Item name"),
+  description: z.string().optional().describe("Item description"),
 };
 
 interface CreatedItem {
@@ -25,24 +12,19 @@ interface CreatedItem {
   name: string;
 }
 
+export const name = "create_item";
+export const description = "Create a new item. Returns the created item's id and name.";
+
 export async function handler(
-  args: Record<string, unknown>,
+  args: { name: string; description?: string },
   config: ApiConfig,
-): Promise<ToolResponse> {
+) {
   const item = await apiRequest<CreatedItem>(config, "/items", {
     method: "POST",
-    body: JSON.stringify({
-      name: args.name,
-      description: args.description ?? "",
-    }),
+    body: JSON.stringify({ name: args.name, description: args.description ?? "" }),
   });
 
   return {
-    content: [
-      {
-        type: "text",
-        text: `Created item "${item.name}" (ID: ${item.id})`,
-      },
-    ],
+    content: [{ type: "text" as const, text: `Created item "${item.name}" (ID: ${item.id})` }],
   };
 }

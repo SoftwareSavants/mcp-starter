@@ -1,24 +1,11 @@
-import type { ApiConfig, ToolResponse } from "../types.js";
+import { z } from "zod";
+import type { ApiConfig } from "../types.js";
 import { apiRequest } from "../auth.js";
 
-export const definition = {
-  name: "list_items",
-  // Keep descriptions SHORT — every character costs tokens on every request
-  description: "List items. Optional status filter. Returns id, name, status.",
-  inputSchema: {
-    type: "object" as const,
-    properties: {
-      status: {
-        type: "string",
-        enum: ["active", "archived"],
-        description: "Filter by status",
-      },
-      limit: {
-        type: "number",
-        description: "Max results (default 10, max 50)",
-      },
-    },
-  },
+// Schema is the single source of truth — defines both validation and types
+export const params = {
+  status: z.enum(["active", "archived"]).optional().describe("Filter by status"),
+  limit: z.number().optional().describe("Max results (default 10, max 50)"),
 };
 
 interface Item {
@@ -27,17 +14,21 @@ interface Item {
   status: string;
 }
 
+export const name = "list_items";
+// Keep descriptions SHORT — every character costs tokens on every request
+export const description = "List items. Optional status filter. Returns id, name, status.";
+
 export async function handler(
-  args: Record<string, unknown>,
+  args: { status?: "active" | "archived"; limit?: number },
   config: ApiConfig,
-): Promise<ToolResponse> {
-  const params = new URLSearchParams();
-  if (args.status) params.set("status", String(args.status));
-  params.set("limit", String(args.limit ?? 10));
+) {
+  const searchParams = new URLSearchParams();
+  if (args.status) searchParams.set("status", args.status);
+  searchParams.set("limit", String(args.limit ?? 10));
 
   const data = await apiRequest<{ items: Item[] }>(
     config,
-    `/items?${params.toString()}`,
+    `/items?${searchParams.toString()}`,
   );
 
   // Return ONLY what the agent needs — lean response
@@ -47,12 +38,5 @@ export async function handler(
     status: i.status,
   }));
 
-  return {
-    content: [
-      {
-        type: "text",
-        text: JSON.stringify(items, null, 2),
-      },
-    ],
-  };
+  return { content: [{ type: "text" as const, text: JSON.stringify(items, null, 2) }] };
 }
