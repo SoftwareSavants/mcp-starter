@@ -14,33 +14,91 @@ cd mcp-starter
 # Install
 npm install
 
-# Run
+# Configure (pre-filled with DummyJSON — works out of the box)
+cp .env.example .env
+
+# Build & run
+npm run build
 npm start
 ```
 
-Then add to your Claude Desktop config (`~/Library/Application Support/Claude/claude_desktop_config.json`):
+Then add to your Claude Desktop config (`~/Library/Application\ Support/Claude/claude_desktop_config.json`):
 
 ```json
 {
   "mcpServers": {
     "my-product": {
       "command": "node",
-      "args": ["path/to/mcp-starter/dist/index.js"],
-      "env": {
-        "API_BASE_URL": "https://api.yourproduct.com",
-        "API_KEY": "your-api-key"
-      }
+      "args": [
+        "--env-file=path/to/mcp-starter/.env",
+        "path/to/mcp-starter/dist/index.js"
+      ]
     }
   }
 }
 ```
 
+## Transport Modes
+
+This template supports two transport modes. Use whichever fits your deployment:
+
+|              | **Stdio (default)**       | **HTTP + OAuth**               |
+| ------------ | ------------------------- | ------------------------------ |
+| **Auth**     | API key via env var       | OAuth 2.1 (PKCE)               |
+| **Best for** | Local dev, Claude Desktop | Production, multi-user, remote |
+| **Run**      | `npm start`               | `npm run start:http`           |
+
+### Stdio Mode (API Key)
+
+The default. Set `API_BASE_URL` and `API_KEY` as environment variables — the server authenticates all API calls with the key.
+
+### HTTP Mode (OAuth)
+
+Runs an Express server with full OAuth 2.1 support. The MCP server acts as a proxy — it delegates authentication to your upstream OAuth provider (e.g. your product's existing OAuth server).
+
+```bash
+# Required environment variables for OAuth mode
+export API_BASE_URL="https://api.yourproduct.com"
+export OAUTH_AUTHORIZATION_URL="https://auth.yourproduct.com/authorize"
+export OAUTH_TOKEN_URL="https://auth.yourproduct.com/token"
+export OAUTH_USERINFO_URL="https://api.yourproduct.com/userinfo"
+export OAUTH_CLIENT_ID="your-oauth-client-id"
+export OAUTH_CLIENT_SECRET="your-oauth-client-secret"
+export OAUTH_SCOPES="read,write"           # comma-separated
+export OAUTH_ISSUER_URL="https://mcp.yourproduct.com"  # optional, defaults to http://localhost:3000
+export PORT=3000                           # optional
+
+npm run start:http
+```
+
+Claude Desktop config for HTTP mode:
+
+```json
+{
+  "mcpServers": {
+    "my-product": {
+      "url": "https://mcp.yourproduct.com/mcp"
+    }
+  }
+}
+```
+
+**How it works:**
+
+1. Client connects to `/mcp` and gets redirected to your OAuth provider
+2. User authorizes the MCP client with your service
+3. Client receives an access token and sends it with each MCP request
+4. The server verifies the token and uses it to call your API on behalf of the user
+
 ## What's Included
 
-- `src/index.ts` — Server entry point with MCP protocol setup
+- `src/index.ts` — Server entry point, registers tools, picks transport mode
 - `src/tools/` — Example tools (list, get, create, search) you replace with your API
-- `src/auth.ts` — API key authentication handler
+- `src/auth.ts` — API key and OAuth token authentication
 - `src/types.ts` — Shared types
+- `src/transports/stdio.ts` — Stdio transport (default)
+- `src/transports/http.ts` — HTTP transport with OAuth middleware
+- `src/oauth-provider.ts` — Proxy OAuth provider config
 - Built-in error handling with user-friendly messages
 - Token-efficient tool descriptions (lean, not bloated)
 
@@ -53,18 +111,27 @@ Edit `src/tools/` — each file exports one tool. A tool has:
 ```typescript
 export const listItems: Tool = {
   name: "list_items",
-  description: "List items with optional filters. Returns name, ID, and status.", // Keep it SHORT
+  description:
+    "List items with optional filters. Returns name, ID, and status.", // Keep it SHORT
   inputSchema: {
     type: "object",
     properties: {
-      status: { type: "string", enum: ["active", "archived"], description: "Filter by status" },
+      status: {
+        type: "string",
+        enum: ["active", "archived"],
+        description: "Filter by status",
+      },
       limit: { type: "number", description: "Max results (default 10)" },
     },
   },
   handler: async (args) => {
     const data = await api.get("/items", { params: args });
     // Return ONLY what the agent needs — not the full API response
-    return data.items.map(i => ({ id: i.id, name: i.name, status: i.status }));
+    return data.items.map((i) => ({
+      id: i.id,
+      name: i.name,
+      status: i.status,
+    }));
   },
 };
 ```
@@ -73,7 +140,11 @@ export const listItems: Tool = {
 
 Update `src/auth.ts` with your authentication method and `API_BASE_URL` in env.
 
-### 3. Keep it lean
+### 3. Configure OAuth (if using HTTP mode)
+
+Update `src/oauth-provider.ts` with your token verification logic. The default uses a userinfo endpoint — adapt it to however your service validates tokens (JWT verification, introspection endpoint, etc.).
+
+### 4. Keep it lean
 
 - **5-10 tools max.** Only expose what users actually do through AI.
 - **Short descriptions.** One sentence. The LLM reads every tool description on every request.

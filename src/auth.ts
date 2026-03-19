@@ -1,5 +1,9 @@
 import type { ApiConfig } from "./types.js";
 
+/**
+ * API key mode — reads API_BASE_URL and API_KEY from environment variables.
+ * Used with stdio transport (default).
+ */
 export function getApiConfig(): ApiConfig {
   const baseUrl = process.env.API_BASE_URL;
   const apiKey = process.env.API_KEY;
@@ -7,7 +11,18 @@ export function getApiConfig(): ApiConfig {
   if (!baseUrl) throw new Error("API_BASE_URL environment variable is required");
   if (!apiKey) throw new Error("API_KEY environment variable is required");
 
-  return { baseUrl, apiKey };
+  return { baseUrl, getAuthHeader: () => `Bearer ${apiKey}` };
+}
+
+/**
+ * OAuth mode — builds config from an OAuth access token.
+ * Used with HTTP transport when the user authenticates via OAuth.
+ */
+export function getApiConfigFromToken(token: string): ApiConfig {
+  const baseUrl = process.env.API_BASE_URL;
+  if (!baseUrl) throw new Error("API_BASE_URL environment variable is required");
+
+  return { baseUrl, getAuthHeader: () => `Bearer ${token}` };
 }
 
 export async function apiRequest<T>(
@@ -20,7 +35,7 @@ export async function apiRequest<T>(
   const response = await fetch(url, {
     ...options,
     headers: {
-      Authorization: `Bearer ${config.apiKey}`,
+      Authorization: config.getAuthHeader(),
       "Content-Type": "application/json",
       ...options?.headers,
     },

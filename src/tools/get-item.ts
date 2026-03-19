@@ -3,32 +3,34 @@ import type { ApiConfig } from "../types.js";
 import { apiRequest } from "../auth.js";
 
 export const params = {
-  id: z.string().describe("Item ID"),
+  id: z.number().describe("Product ID"),
 };
 
-interface ItemDetail {
-  id: string;
-  name: string;
-  status: string;
-  createdAt: string;
+interface ProductDetail {
+  id: number;
+  title: string;
   description: string;
+  category: string;
+  price: number;
+  rating: number;
+  brand: string;
 }
 
 export const name = "get_item";
-export const description = "Get item details by ID. Returns id, name, status, created date.";
+export const description = "Get product details by ID. Returns title, description, price, rating.";
 
 export async function handler(
-  args: { id: string },
+  args: { id: number },
   config: ApiConfig,
 ) {
-  const item = await apiRequest<ItemDetail>(config, `/items/${args.id}`);
+  const item = await apiRequest<ProductDetail>(config, `/products/${args.id}`);
 
   return {
     content: [
       {
         type: "text" as const,
         text: JSON.stringify(
-          { id: item.id, name: item.name, status: item.status, created: item.createdAt, description: item.description },
+          { id: item.id, title: item.title, description: item.description, category: item.category, price: item.price, rating: item.rating, brand: item.brand },
           null, 2,
         ),
       },

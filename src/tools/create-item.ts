@@ -3,28 +3,29 @@ import type { ApiConfig } from "../types.js";
 import { apiRequest } from "../auth.js";
 
 export const params = {
-  name: z.string().describe("Item name"),
-  description: z.string().optional().describe("Item description"),
+  title: z.string().describe("Product title"),
+  description: z.string().optional().describe("Product description"),
+  price: z.number().optional().describe("Product price"),
 };
 
-interface CreatedItem {
-  id: string;
-  name: string;
+interface CreatedProduct {
+  id: number;
+  title: string;
 }
 
 export const name = "create_item";
-export const description = "Create a new item. Returns the created item's id and name.";
+export const description = "Create a new product. Returns the created product's id and title.";
 
 export async function handler(
-  args: { name: string; description?: string },
+  args: { title: string; description?: string; price?: number },
   config: ApiConfig,
 ) {
-  const item = await apiRequest<CreatedItem>(config, "/items", {
+  const item = await apiRequest<CreatedProduct>(config, "/products/add", {
     method: "POST",
-    body: JSON.stringify({ name: args.name, description: args.description ?? "" }),
+    body: JSON.stringify({ title: args.title, description: args.description ?? "", price: args.price ?? 0 }),
   });
 
   return {
-    content: [{ type: "text" as const, text: `Created item "${item.name}" (ID: ${item.id})` }],
+    content: [{ type: "text" as const, text: `Created product "${item.title}" (ID: ${item.id})` }],
   };
 }
